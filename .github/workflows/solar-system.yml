@@ -20,7 +20,7 @@ jobs:
                 operating-system: [ubuntu-latest, macos-latest]
                 exclude:
                     - node-version: 18
-                      operating-system: ubuntu-latest
+                      operating-system: macos-latest
         runs-on: ${{ matrix.operating-system }}
         steps:
             - name: Checkout code
