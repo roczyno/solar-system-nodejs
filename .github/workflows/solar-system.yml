@@ -37,8 +37,34 @@ jobs:
             - name: Run tests
               run: npm test
 
+
             - name: archive test results
               uses: actions/upload-artifact@v6
               with:
                   name: mocha-test-results-${{ matrix.node-version }}-${{ matrix.operating-system }}
                   path: test-results.xml
+    
+    code-coverage:
+        name: Code Coverage
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v2
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v2
+              with:
+                  node-version: 18
+
+            - name: Install dependencies
+              run: npm install
+
+            - name: Run tests with coverage
+              run: npm run coverage
+
+            - name: Archive coverage report
+              uses: actions/upload-artifact@v6
+              with:
+                  name: coverage-report
+                  path: coverage/
+                  retention-days: 5
