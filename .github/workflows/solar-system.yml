@@ -92,6 +92,13 @@ jobs:
                   username: ${{ vars.DOCKER_USERNAME }}
                   password: ${{ secrets.DOCKER_PASSWORD }}
 
+            - name: login to GHRC
+              uses: docker/login-action@v3
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+
                   
             - name: Build build for testing
               uses: docker/build-push-action@v6
@@ -120,4 +127,6 @@ jobs:
               with:
                 context: "."
                 push: true
-                tags: ${{ vars.DOCKER_USERNAME }}/solar-system:${{ github.sha }}
+                tags: |
+                 ${{ vars.DOCKER_USERNAME }}/solar-system:${{ github.sha }}
+                 ghcr.io/${{ github.repository_owner }}/solar-system:${{ github.sha }}
