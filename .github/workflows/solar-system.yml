@@ -87,7 +87,31 @@ jobs:
               uses: actions/checkout@v2
 
             - name: Log in to Docker Hub
-              uses: docker/login-action@v2
+              uses: docker/login-action@v3
               with:
                   username: ${{ vars.DOCKER_USERNAME }}
                   password: ${{ secrets.DOCKER_PASSWORD }}
+
+                  
+            - name: Build build for testing
+              uses: docker/build-push-action@v6
+              with:
+                context: "."
+                push: false
+                tags: ${{ vars.DOCKER_USERNAME }}/solar-system:${{ github.sha }}
+
+            - name: Docker Image Testing
+              run: |
+                docker images
+                docker run --name solar-system-app -d \
+                - p 3000:3000 \
+                -e MONGO_URI=${{ env.MONGO_URI }} \
+                -e MONGO_USERNAME=${{ env.MONGO_USERNAME }} \
+                -e MONGO_PASSWORD=${{ env.MONGO_PASSWORD }} \
+                ${{ vars.DOCKER_USERNAME }}/solar-system:${{ github.sha }}
+
+                export IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' solar-system-app)
+                echo "Container IP: $IP"
+
+                echo "Testing API endpoint..."
+                wget -q -o - 127.0.0.1:3000/live | grep live
