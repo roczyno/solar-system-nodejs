@@ -81,6 +81,8 @@ jobs:
     docker:
         needs: [unit-testing, code-coverage]
         name: Build and Push Docker Image
+        permissions:
+            packages: write
         runs-on: ubuntu-latest
         steps:
             - name: Checkout code
