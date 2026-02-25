@@ -19,10 +19,10 @@ jobs:
         image: siddharth67/mongo-db:non-prod
         ports:
           - 27017:27017
-        env:
-          MONGO_URI: "mongodb://localhost:27017/superData"
-          MONGO_PASSWORD: "non-prod-password"
-          MONGO_USERNAME: "non-prod-user"
+    env:
+       MONGO_URI: "mongodb://localhost:27017/superData"
+       MONGO_PASSWORD: "non-prod-password"
+       MONGO_USERNAME: "non-prod-user"
     strategy:
       matrix:
         node-version: [18, 19, 20]
