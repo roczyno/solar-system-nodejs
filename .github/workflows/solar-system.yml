@@ -164,6 +164,12 @@ jobs:
         uses: azure/setup-kubectl@v3
         with:
           version: 'latest'
+      
+      - name: Set up kubeconfig
+        uses: azure/setup-kubectl@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBECONFIG_DEV }}
 
       - name: fetch kubernetes cluster details
         run: |
