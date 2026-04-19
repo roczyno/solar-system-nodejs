@@ -251,7 +251,7 @@ jobs:
         run: |
           kubectl apply -f kubernetes/development
 
-  Integration-tests:
+  dev-integration-tests:
     needs: dev-deploy
     runs-on: ubuntu-latest
     name: Dev Integration Tests
@@ -282,5 +282,123 @@ jobs:
       - name: Test endpoint
         run: |
           URL=http://${{ needs.dev-deploy.outputs.app_ingress_url }}
+          echo "Testing $URL"
+          curl -s $URL | jq .
+
+  prod-deploy:
+    needs: dev-integration-tests
+    runs-on: ubuntu-latest
+    name: Deploy to Production Environment
+    environment:
+      name: production
+      url: http://${{ steps.ingress.outputs.app_ingress_url }}
+
+    outputs:
+      app_ingress_url: ${{ steps.ingress.outputs.app_ingress_url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: latest
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Generate kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region us-east-1 \
+            --name my-eks-cluster
+
+      - name: Get ingress external hostname
+        id: ingress
+        run: |
+          for i in {1..30}; do
+            HOST=$(kubectl get svc ingress-nginx-controller \
+              -n ingress-nginx \
+              -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+
+            if [ -n "$HOST" ]; then
+              echo "host=$HOST" >> $GITHUB_OUTPUT
+              echo "app_ingress_url=solar-system-${{ vars.NAMESPACE }}.$HOST.nip.io" >> $GITHUB_OUTPUT
+              echo "Ingress host: $HOST"
+              exit 0
+            fi
+
+            echo "Waiting for ingress hostname..."
+            sleep 10
+          done
+
+          echo "Ingress hostname not ready"
+          exit 1
+
+      - name: Ensure namespace exists
+        run: |
+          kubectl create namespace ${{ vars.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Replace tokens in manifests
+        uses: cschleiden/replace-tokens@v1
+        with:
+          tokenPrefix: "_{_"
+          tokenSuffix: "_}_"
+          files: "kubernetes/staging/*.yaml"
+        env:
+          NAMESPACE: ${{ vars.NAMESPACE }}
+          REPLICAS: ${{ vars.REPLICAS }}
+          IMAGE: ${{ vars.DOCKER_USERNAME }}/solar-system:${{ github.sha }}
+          INGRESS_IP: ${{ steps.ingress.outputs.host }}
+
+      - name: Secret for MongoDB credentials
+        run: |
+          kubectl create secret generic mongo-db-creds \
+            --namespace ${{ vars.NAMESPACE }} \
+            --from-literal=username=${{ env.MONGO_USERNAME }} \
+            --from-literal=password=${{ env.MONGO_PASSWORD }} \
+            --from-literal=uri=${{ env.MONGO_URI }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy to cluster
+        run: |
+          kubectl apply -f kubernetes/staging
+
+  prod-integration-tests:
+    needs: prod-deploy
+    runs-on: ubuntu-latest
+    name: Prod Integration Tests
+
+    steps:
+      - name: Install curl + jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl jq
+
+      - name: Wait for app to be ready
+        run: |
+          URL=http://${{ needs.prod-deploy.outputs.app_ingress_url }}
+
+          for i in {1..20}; do
+            if curl -s $URL > /dev/null; then
+              echo "App is up at $URL"
+              exit 0
+            fi
+
+            echo "Waiting for app..."
+            sleep 10
+          done
+
+          echo "App not responding"
+          exit 1
+
+      - name: Test endpoint
+        run: |
+          URL=http://${{ needs.prod-deploy.outputs.app_ingress_url }}
           echo "Testing $URL"
           curl -s $URL | jq .
