@@ -20,13 +20,13 @@ jobs:
         ports:
           - 27017:27017
     env:
-       MONGO_URI: "mongodb://localhost:27017/superData"
-       MONGO_PASSWORD: "non-prod-password"
-       MONGO_USERNAME: "non-prod-user"
+      MONGO_URI: "mongodb://localhost:27017/superData"
+      MONGO_PASSWORD: "non-prod-password"
+      MONGO_USERNAME: "non-prod-user"
     strategy:
       matrix:
-        node-version: [18, 19, 20]
-        operating-system: [ubuntu-latest]
+        node-version: [ 18, 19, 20 ]
+        operating-system: [ ubuntu-latest ]
         exclude:
           - node-version: 18
             operating-system: macos-latest
@@ -57,7 +57,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: mocha-test-results-${{ matrix.node-version }}-${{ matrix.operating-system }}
+          name: mocha-test-results-${{ matrix.node-version }}-${{ matrix.operating-system
+            }}
           path: test-results.xml
 
   code-coverage:
@@ -67,12 +68,11 @@ jobs:
     services:
       mongodb:
         image: siddharth67/mongo-db:non-prod
-        options:
-           --name mongo
+        options: --name mongo
     env:
-       MONGO_URI: "mongodb://mongo:27017/superData"
-       MONGO_PASSWORD: "non-prod-password"
-       MONGO_USERNAME: "non-prod-user"
+      MONGO_URI: "mongodb://mongo:27017/superData"
+      MONGO_PASSWORD: "non-prod-password"
+      MONGO_USERNAME: "non-prod-user"
 
     runs-on: ubuntu-latest
     steps:
@@ -99,7 +99,7 @@ jobs:
           retention-days: 5
 
   docker:
-    needs: [unit-testing, code-coverage]
+    needs: [ unit-testing, code-coverage ]
     name: Build and Push Docker Image
     permissions:
       packages: write
@@ -160,11 +160,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Install kubectl using actions
+      - name: Install kubectl
         uses: azure/setup-kubectl@v3
-        with:
-          version: 'latest'
-      
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -178,10 +176,38 @@ jobs:
             --region us-east-1 \
             --name my-eks-cluster
 
-      - name: fetch kubernetes cluster details
+      - name: Verify cluster
         run: |
-         kubectl version
-         echo --------------
-         kubectl get nodes
+          kubectl get nodes
 
-       
+      - name: Ensure namespace exists
+        run: |
+          kubectl create namespace ${{ vars.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Wait for ingress IP
+        run: |
+          for i in {1..30}; do
+            IP=$(kubectl get svc ingress-nginx-controller \
+              -n ingress-nginx \
+              -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+            
+            if [ -n "$IP" ]; then
+              echo "INGRESS_IP=$IP" >> $GITHUB_ENV
+              exit 0
+            fi
+            
+            sleep 10
+          done
+          exit 1
+
+      - name: Replace tokens in manifests
+        uses: cschleiden/replace-tokens@v1
+        with:
+          tokenPrefix: "_{_"
+          tokenSuffix: "_}_"
+          files: "kubernetes/deployment/*.yaml"
+        env:
+          NAMESPACE: ${{ vars.NAMESPACE }}
+          REPLICAS: ${{ vars.REPLICAS }}
+          IMAGE: ${{ vars.DOCKER_USERNAME }}/solar-system:${{ github.sha }}
+          INGRESS_IP: ${{ env.INGRESS_IP }}
