@@ -151,86 +151,89 @@ jobs:
           tags: |
             ${{ vars.DOCKER_USERNAME }}/solar-system:${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/solar-system:${{ github.sha }}
-dev-deploy:
-  needs: docker
-  runs-on: ubuntu-latest
-  name: Deploy to Development Environment
+  dev-deploy:
+    needs: docker
+    runs-on: ubuntu-latest
+    name: Deploy to Development Environment
 
-  steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-    - name: Install kubectl
-      uses: azure/setup-kubectl@v3
-      with:
-        version: latest
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: latest
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
 
-    - name: Generate kubeconfig
-      run: |
-        aws eks update-kubeconfig \
-          --region us-east-1 \
-          --name my-eks-cluster
+      - name: Generate kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region us-east-1 \
+            --name my-eks-cluster
 
-    - name: Verify cluster
-      run: |
-        kubectl get nodes
+      - name: Verify cluster
+        run: |
+          kubectl get nodes
 
-    # ✅ Install ingress controller
-    - name: Install NGINX Ingress Controller
-      run: |
-        kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/aws/deploy.yaml
+      # ✅ Install ingress controller
+      - name: Install NGINX Ingress Controller
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/aws/deploy.yaml
 
-    # ✅ Wait until controller is ready
-    - name: Wait for ingress controller
-      run: |
-        kubectl wait --namespace ingress-nginx \
-          --for=condition=available deployment/ingress-nginx-controller \
-          --timeout=180s
+      # ✅ Wait until controller is ready
+      - name: Wait for ingress controller
+        run: |
+          kubectl wait --namespace ingress-nginx \
+            --for=condition=available deployment/ingress-nginx-controller \
+            --timeout=180s
 
-    # ✅ Wait for AWS LoadBalancer hostname
-    - name: Get ingress external hostname
-      run: |
-        for i in {1..30}; do
-          IP=$(kubectl get svc ingress-nginx-controller \
-            -n ingress-nginx \
-            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+      # ✅ Wait for AWS LoadBalancer hostname
+      - name: Get ingress external hostname
+        run: |
+          for i in {1..30}; do
+            IP=$(kubectl get svc ingress-nginx-controller \
+              -n ingress-nginx \
+              -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
 
-          if [ -n "$IP" ]; then
-            echo "INGRESS_IP=$IP" >> $GITHUB_ENV
-            echo "Ingress hostname: $IP"
-            exit 0
-          fi
+            if [ -n "$IP" ]; then
+              echo "INGRESS_IP=$IP" >> $GITHUB_ENV
+              echo "Ingress hostname: $IP"
+              exit 0
+            fi
 
-          echo "Waiting for ingress hostname..."
-          sleep 10
-        done
+            echo "Waiting for ingress hostname..."
+            sleep 10
+          done
 
-        echo "Ingress hostname not ready in time"
-        exit 1
+          echo "Ingress hostname not ready in time"
+          exit 1
 
-    # ✅ Ensure namespace exists
-    - name: Ensure namespace exists
-      run: |
-        kubectl create namespace ${{ vars.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+      # ✅ Ensure namespace exists
+      - name: Ensure namespace exists
+        run: |
+          kubectl create namespace ${{ vars.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
 
-    # ✅ Replace variables in manifests
-    - name: Replace tokens in manifest files
-      uses: cschleiden/replace-tokens@v1
-      with:
-        tokenPrefix: '_{_'
-        tokenSuffix: '_}_'
-        files: 'kubernetes/deployment/*.yaml'
-      env:
-        NAMESPACE: ${{ vars.NAMESPACE }}
-        REPLICAS: ${{ vars.REPLICAS }}
-        IMAGE: ${{ vars.DOCKER_USERNAME }}/solar-system:${{ github.sha }}
-        INGRESS_IP: ${{ env.INGRESS_IP }}
+      # ✅ Replace variables in manifests
+      - name: Replace tokens in manifest files
+        uses: cschleiden/replace-tokens@v1
+        with:
+          tokenPrefix: '_{_'
+          tokenSuffix: '_}_'
+          files: 'kubernetes/deployment/*.yaml'
+        env:
+          NAMESPACE: ${{ vars.NAMESPACE }}
+          REPLICAS: ${{ vars.REPLICAS }}
+          IMAGE: ${{ vars.DOCKER_USERNAME }}/solar-system:${{ github.sha }}
+          INGRESS_IP: ${{ env.INGRESS_IP }}
 
-   
+      # # ✅ Deploy to cluster
+      # - name: Apply Kubernetes manifests
+      #   run: |
+      #     kubectl apply -f kubernetes/deployment/
