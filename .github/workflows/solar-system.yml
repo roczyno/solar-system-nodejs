@@ -247,4 +247,4 @@ jobs:
       # ✅ Deploy to cluster
       - name: Apply Kubernetes manifests
         run: |
-          kubectl apply -f kubernetes/deployment/ --namespace ${{ vars.NAMESPACE }}
+          kubectl apply -f kubernetes/development/ --namespace ${{ vars.NAMESPACE }}
