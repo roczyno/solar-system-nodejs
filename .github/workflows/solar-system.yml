@@ -159,6 +159,7 @@ jobs:
 
     outputs:
       ingress_host: ${{ steps.ingress.outputs.host }}
+      app_ingress_url: ${{ steps.ingress.outputs.app_ingress_url }}
 
     steps:
       - name: Checkout code
@@ -205,6 +206,7 @@ jobs:
 
             if [ -n "$HOST" ]; then
               echo "host=$HOST" >> $GITHUB_OUTPUT
+              echo "app_ingress_url=solar-system-${{ vars.NAMESPACE }}.$HOST.nip.io" >> $GITHUB_OUTPUT
               echo "Ingress host: $HOST"
               exit 0
             fi
@@ -249,7 +251,7 @@ jobs:
 
       - name: Wait for app to be ready
         run: |
-          URL=http://${{ needs.dev-deploy.outputs.ingress_host }}
+          URL=http://${{ needs.dev-deploy.outputs.app_ingress_url }}
 
           for i in {1..20}; do
             if curl -s $URL > /dev/null; then
@@ -266,6 +268,6 @@ jobs:
 
       - name: Test endpoint
         run: |
-          URL=http://${{ needs.dev-deploy.outputs.ingress_host }}
+          URL=http://${{ needs.dev-deploy.outputs.app_ingress_url }}
           echo "Testing $URL"
           curl -s $URL | jq .
