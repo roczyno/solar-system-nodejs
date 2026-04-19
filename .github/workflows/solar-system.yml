@@ -156,6 +156,7 @@ jobs:
     needs: docker
     runs-on: ubuntu-latest
     name: Deploy to Development Environment
+    if: contains(github.ref, 'feature/')
     environment:
       name: development
       url: ${{ needs.dev-deploy.outputs.app_ingress_url }}
@@ -255,6 +256,7 @@ jobs:
     needs: dev-deploy
     runs-on: ubuntu-latest
     name: Dev Integration Tests
+    if: contains(github.ref, 'feature/')
 
     steps:
       - name: Install curl + jq
@@ -286,9 +288,10 @@ jobs:
           curl -s $URL | jq .
 
   prod-deploy:
-    needs: dev-integration-tests
+    needs: docker
     runs-on: ubuntu-latest
     name: Deploy to Production Environment
+    if: github.ref == 'refs/heads/main'
     environment:
       name: production
       url: http://${{ steps.ingress.outputs.app_ingress_url }}
@@ -373,6 +376,7 @@ jobs:
     needs: prod-deploy
     runs-on: ubuntu-latest
     name: Prod Integration Tests
+    if: github.ref == 'refs/heads/main'
 
     steps:
       - name: Install curl + jq
