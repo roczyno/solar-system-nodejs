@@ -152,11 +152,13 @@ jobs:
             ${{ vars.DOCKER_USERNAME }}/solar-system:${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/solar-system:${{ github.sha }}
 
-
   dev-deploy:
     needs: docker
     runs-on: ubuntu-latest
     name: Deploy to Development Environment
+
+    outputs:
+      ingress_host: ${{ steps.ingress.outputs.host }}
 
     steps:
       - name: Checkout code
@@ -181,32 +183,29 @@ jobs:
             --name my-eks-cluster
 
       - name: Verify cluster
-        run: |
-          kubectl get nodes
+        run: kubectl get nodes
 
-      # ✅ Install ingress controller
       - name: Install NGINX Ingress Controller
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/aws/deploy.yaml
 
-      # ✅ Wait until controller is ready
       - name: Wait for ingress controller
         run: |
           kubectl wait --namespace ingress-nginx \
             --for=condition=available deployment/ingress-nginx-controller \
             --timeout=180s
 
-      # ✅ Wait for AWS LoadBalancer hostname
       - name: Get ingress external hostname
+        id: ingress
         run: |
           for i in {1..30}; do
-            IP=$(kubectl get svc ingress-nginx-controller \
+            HOST=$(kubectl get svc ingress-nginx-controller \
               -n ingress-nginx \
               -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
 
-            if [ -n "$IP" ]; then
-              echo "INGRESS_IP=$IP" >> $GITHUB_ENV
-              echo "Ingress hostname: $IP"
+            if [ -n "$HOST" ]; then
+              echo "host=$HOST" >> $GITHUB_OUTPUT
+              echo "Ingress host: $HOST"
               exit 0
             fi
 
@@ -214,37 +213,59 @@ jobs:
             sleep 10
           done
 
-          echo "Ingress hostname not ready in time"
+          echo "Ingress hostname not ready"
           exit 1
 
-      # ✅ Ensure namespace exists
       - name: Ensure namespace exists
         run: |
           kubectl create namespace ${{ vars.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
 
-      # ✅ Replace variables in manifests
-      - name: Replace tokens in manifest files
+      - name: Replace tokens in manifests
         uses: cschleiden/replace-tokens@v1
         with:
-          tokenPrefix: '_{_'
-          tokenSuffix: '_}_'
-          files: 'kubernetes/deployment/*.yaml'
+          tokenPrefix: "_{_"
+          tokenSuffix: "_}_"
+          files: "kubernetes/development/*.yaml"
         env:
           NAMESPACE: ${{ vars.NAMESPACE }}
           REPLICAS: ${{ vars.REPLICAS }}
           IMAGE: ${{ vars.DOCKER_USERNAME }}/solar-system:${{ github.sha }}
-          INGRESS_IP: ${{ env.INGRESS_IP }}
+          INGRESS_IP: ${{ steps.ingress.outputs.host }}
 
-      - name: Create MongoDB secret
+      - name: Deploy to cluster
         run: |
-          kubectl create secret generic mongo-secret \
-            --namespace ${{ vars.NAMESPACE }} \
-            --from-literal=MONGO_URI=${{ env.MONGO_URI }} \
-            --from-literal=MONGO_USERNAME=${{ env.MONGO_USERNAME }} \
-            --from-literal=MONGO_PASSWORD=${{ env.MONGO_PASSWORD }} \
-            --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply -f kubernetes/development
 
-      # ✅ Deploy to cluster
-      - name: Apply Kubernetes manifests
+  Integration-tests:
+    needs: dev-deploy
+    runs-on: ubuntu-latest
+    name: Dev Integration Tests
+
+    steps:
+      - name: Install curl + jq
         run: |
-          kubectl apply -f kubernetes/development/ 
+          sudo apt-get update
+          sudo apt-get install -y curl jq
+
+      - name: Wait for app to be ready
+        run: |
+          URL=http://${{ needs.dev-deploy.outputs.ingress_host }}
+
+          for i in {1..20}; do
+            if curl -s $URL > /dev/null; then
+              echo "App is up at $URL"
+              exit 0
+            fi
+
+            echo "Waiting for app..."
+            sleep 10
+          done
+
+          echo "App not responding"
+          exit 1
+
+      - name: Test endpoint
+        run: |
+          URL=http://${{ needs.dev-deploy.outputs.ingress_host }}
+          echo "Testing $URL"
+          curl -s $URL | jq .
