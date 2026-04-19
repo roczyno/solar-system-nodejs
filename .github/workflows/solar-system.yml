@@ -233,6 +233,16 @@ jobs:
           REPLICAS: ${{ vars.REPLICAS }}
           IMAGE: ${{ vars.DOCKER_USERNAME }}/solar-system:${{ github.sha }}
           INGRESS_IP: ${{ steps.ingress.outputs.host }}
+          APP_INGRESS_URL: ${{ steps.ingress.outputs.app_ingress_url }}
+
+      - name: Secret for MongoDB credentials
+        run: |
+          kubectl create secret generic mongo-db-creds \
+            --namespace ${{ vars.NAMESPACE }} \
+            --from-literal=username=${{ env.MONGO_USERNAME }} \
+            --from-literal=password=${{ env.MONGO_PASSWORD }} \
+            --from-literal=uri=${{ env.MONGO_URI }} \
+            --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Deploy to cluster
         run: |
