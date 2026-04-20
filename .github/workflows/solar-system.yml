@@ -167,6 +167,7 @@ jobs:
       environment-name: development
       manifests-dir: kubernetes/development
       install-ingress: true
+      mongo-uri: ${{ vars.MONGO_URI }}
     secrets: inherit
 
   prod-deploy:
@@ -178,4 +179,5 @@ jobs:
       environment-name: production
       manifests-dir: kubernetes/staging
       install-ingress: false
+      mongo-uri: ${{ vars.MONGO_URI }}
     secrets: inherit

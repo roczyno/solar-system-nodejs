@@ -13,12 +13,13 @@ on:
                 required: false
                 type: boolean
                 default: false
+            mongo-uri:
+                required: true
+                type: string
         secrets:
             AWS_ACCESS_KEY_ID:
                 required: true
             AWS_SECRET_ACCESS_KEY:
-                required: true
-            MONGO_URI:
                 required: true
             MONGO_USERNAME:
                 required: true
@@ -122,7 +123,7 @@ jobs:
                     --namespace ${{ vars.NAMESPACE }} \
                     --from-literal=username=${{ secrets.MONGO_USERNAME }} \
                     --from-literal=password=${{ secrets.MONGO_PASSWORD }} \
-                    --from-literal=uri=${{ secrets.MONGO_URI }} \
+                    --from-literal=uri=${{ inputs.mongo-uri }} \
                     --dry-run=client -o yaml | kubectl apply -f -
 
             - name: Deploy to cluster
