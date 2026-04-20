@@ -5,6 +5,16 @@ on:
       - main
       - feature/*
   workflow_dispatch:
+    inputs:
+      deploy-environment:
+        description: "Environment to deploy to"
+        required: false
+        type: choice
+        options:
+          - development
+          - production
+          - none
+        default: none
 
 jobs:
   unit-testing:
@@ -149,7 +159,8 @@ jobs:
 
   dev-deploy:
     needs: docker
-    if: contains(github.ref, 'feature/')
+    if: contains(github.ref, 'feature/') || inputs.deploy-environment ==
+      'development'
     name: Dev Deploy
     uses: ./.github/workflows/resuse-deployment.yml
     with:
@@ -160,7 +171,7 @@ jobs:
 
   prod-deploy:
     needs: docker
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || inputs.deploy-environment == 'production'
     name: Prod Deploy
     uses: ./.github/workflows/resuse-deployment.yml
     with:
