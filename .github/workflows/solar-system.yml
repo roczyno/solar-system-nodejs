@@ -6,11 +6,6 @@ on:
       - feature/*
   workflow_dispatch:
 
-env:
-  MONGO_URI: mongodb+srv://cluster0.s6hco5c.mongodb.net/?appName=Cluster0
-  MONGO_USERNAME: roczyno
-  MONGO_PASSWORD: Password1@
-
 jobs:
   unit-testing:
     name: Unit Testing
@@ -132,9 +127,9 @@ jobs:
         run: |
           docker run --name solar-system-app -d \
             -p 3000:3000 \
-            -e MONGO_URI=${{ env.MONGO_URI }} \
-            -e MONGO_USERNAME=${{ env.MONGO_USERNAME }} \
-            -e MONGO_PASSWORD=${{ env.MONGO_PASSWORD }} \
+            -e MONGO_URI=${{ vars.MONGO_URI }} \
+            -e MONGO_USERNAME=${{ secrets.MONGO_USERNAME }} \
+            -e MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }} \
             ${{ vars.DOCKER_USERNAME }}/solar-system:${{ github.sha }}
 
           echo "Waiting for container..."
